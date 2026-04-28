@@ -7,25 +7,6 @@ from supabase import create_client
 from pydantic import BaseModel
 from typing import Optional
 import os, random, string, logging
-from fastapi import Depends
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-import secrets
-
-security = HTTPBasic()
-
-ADMIN_USER = os.environ["ADMIN_USER"]  # dans les variables Railway
-ADMIN_PASS = os.environ["ADMIN_PASS"]
-
-def require_admin(credentials: HTTPBasicCredentials = Depends(security)):
-    ok_user = secrets.compare_digest(credentials.username, ADMIN_USER)
-    ok_pass = secrets.compare_digest(credentials.password, ADMIN_PASS)
-    if not (ok_user and ok_pass):
-        raise HTTPException(status_code=401)
-    return credentials
-
-# Protège les routes sensibles
-@app.get("/api/inscriptions")
-def get_inscriptions(creds = Depends(require_admin)):
 
 # ════════════════════════════════════════════════
 # CONFIGURATION
@@ -291,7 +272,7 @@ def create_inscription(request: Request, data: Inscription):
         "code_transaction": txn_clean,
         "montant":          montant_reel,
         "numero_ticket":    ticket,
-        "statut": "confirmed" if (data.operateur or "").lower() == "cash" else "pending",
+        "statut":           "pending",
         "billet_utilise":   False
     }
 
