@@ -217,14 +217,14 @@ def create_inscription(request: Request, data: Inscription):
     # ════════════════════════════════
     # BLOC 3 — MONTANT DEPUIS LA BDD
     # ════════════════════════════════
+# ════════════════════════════════
+# BLOC 3 — MONTANT DEPUIS LA BDD
+# ════════════════════════════════
     try:
         ticket_type_res = supabase.table("ticket_types")\
             .select("id, nom, prix, type_code, actif")\
             .eq("actif", True)\
-            .or_(
-                f"type_code.eq.{data.type_ticket},"
-                f"id.eq.{data.type_ticket}"
-            )\
+            .eq("type_code", data.type_ticket)\
             .limit(1)\
             .execute()
     except Exception as e:
