@@ -272,7 +272,7 @@ def create_inscription(request: Request, data: Inscription):
         "code_transaction": txn_clean,
         "montant":          montant_reel,
         "numero_ticket":    ticket,
-        "statut":           "pending",
+        "statut": "confirmed" if (data.operateur or "").lower() == "cash" else "pending",
         "billet_utilise":   False
     }
 
