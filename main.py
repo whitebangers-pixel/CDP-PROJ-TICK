@@ -1,5 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from supabase import create_client
 from pydantic import BaseModel
 from typing import Optional
@@ -11,7 +14,14 @@ import os, random, string, logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ── Rate Limiter ──
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI()
+
+# ── Gestionnaire d'erreur rate limit ──
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -69,7 +79,8 @@ def health():
 # INSCRIPTIONS — GET (compteur pour la page HTML)
 # ════════════════════════════════════════════════
 @app.get("/api/inscriptions")
-def get_inscriptions(limit: int = 500):
+@limiter.limit("30/minute")   # 30 lectures/min par IP
+def get_inscriptions(request: Request, limit: int = 500):
     try:
         res = supabase.table("inscriptions")\
             .select("*")\
@@ -85,7 +96,8 @@ def get_inscriptions(limit: int = 500):
 # INSCRIPTIONS — POST (création depuis page HTML)
 # ════════════════════════════════════════════════
 @app.post("/api/inscriptions")
-def create_inscription(data: Inscription):
+@limiter.limit("5/minute")    # max 5 tentatives/min par IP
+def create_inscription(request: Request, data: Inscription):
 
     # ════════════════════════════════
     # BLOC 1 — VALIDATIONS DE BASE
@@ -284,7 +296,8 @@ def create_inscription(data: Inscription):
 # INSCRIPTIONS — PATCH statut (panel admin)
 # ════════════════════════════════════════════════
 @app.patch("/api/inscriptions/{ticket}/statut")
-def update_statut(ticket: str, update: StatutUpdate):
+@limiter.limit("20/minute")   # actions admin
+def update_statut(request: Request, ticket: str, update: StatutUpdate):
     statuts_autorises = ["pending", "valide", "refuse", "rembourse"]
     if update.statut not in statuts_autorises:
         raise HTTPException(
@@ -306,7 +319,8 @@ def update_statut(ticket: str, update: StatutUpdate):
 # INSCRIPTIONS — PATCH utilisé (scan à l'entrée)
 # ════════════════════════════════════════════════
 @app.patch("/api/inscriptions/{ticket}/utilise")
-def mark_used(ticket: str):
+@limiter.limit("20/minute")
+def mark_used(request: Request, ticket: str):
     try:
         res = supabase.table("inscriptions")\
             .update({"billet_utilise": True})\
@@ -322,7 +336,8 @@ def mark_used(ticket: str):
 # TICKET TYPES (affiché sur la page HTML)
 # ════════════════════════════════════════════════
 @app.get("/api/ticket-types")
-def get_ticket_types():
+@limiter.limit("30/minute")
+def get_ticket_types(request: Request):
     try:
         res = supabase.table("ticket_types")\
             .select("*")\
@@ -338,7 +353,8 @@ def get_ticket_types():
 # PLANNING (affiché sur la page HTML)
 # ════════════════════════════════════════════════
 @app.get("/api/planning")
-def get_planning():
+@limiter.limit("30/minute")
+def get_planning(request: Request):
     try:
         res = supabase.table("planning")\
             .select("*")\
@@ -354,7 +370,8 @@ def get_planning():
 # EVENEMENTS
 # ════════════════════════════════════════════════
 @app.get("/api/evenements")
-def get_evenements():
+@limiter.limit("30/minute")
+def get_evenements(request: Request):
     try:
         res = supabase.table("evenements")\
             .select("*")\
@@ -367,7 +384,8 @@ def get_evenements():
         raise HTTPException(status_code=500, detail="Erreur serveur")
 
 @app.post("/api/evenements")
-def upsert_evenement(data: dict):
+@limiter.limit("10/minute")
+def upsert_evenement(request: Request, data: dict):
     try:
         res = supabase.table("evenements").upsert(data).execute()
         return res.data
@@ -379,7 +397,8 @@ def upsert_evenement(data: dict):
 # COMMENTAIRES (affiché sur la page HTML)
 # ════════════════════════════════════════════════
 @app.get("/api/commentaires/{evenement_id}")
-def get_commentaires(evenement_id: str):
+@limiter.limit("30/minute")
+def get_commentaires(request: Request, evenement_id: str):
     try:
         res = supabase.table("commentaires")\
             .select("*")\
@@ -392,7 +411,8 @@ def get_commentaires(evenement_id: str):
         raise HTTPException(status_code=500, detail="Erreur serveur")
 
 @app.post("/api/commentaires")
-def post_commentaire(data: dict):
+@limiter.limit("10/minute")   # anti-spam commentaires
+def post_commentaire(request: Request, data: dict):
     if not data.get("contenu") or \
        len(str(data["contenu"]).strip()) < 2:
         raise HTTPException(
