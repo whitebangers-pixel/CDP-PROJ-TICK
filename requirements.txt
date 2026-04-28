@@ -2,3 +2,4 @@ fastapi
 uvicorn
 supabase
 python-dotenv
+slowapi==0.1.9
